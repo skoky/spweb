@@ -11,14 +11,16 @@ import java.time.format.DateTimeFormatter
 
 
 data class Status(
-        val workmode: String,
+        val workMode: String,
         val batteryVoltage: String,
         val inputPower: String,
         val chargingCurrent: String,
-        val timestamp: String
+        val timestamp: String,
+        val batteryPowerCalc: String
 )
+fun emptyStatus() = Status(workMode = "Starting", batteryVoltage = "-", inputPower = "-", timestamp = "-", chargingCurrent = "-", batteryPowerCalc = "-")
 
-var status = Status(workmode = "Starting", batteryVoltage = "-", inputPower = "-", timestamp = "-", chargingCurrent = "-")
+var status = emptyStatus()
 
 fun main(args: Array<String>) {
 
@@ -41,7 +43,7 @@ fun main(args: Array<String>) {
             while (true) {
                 socket.receive(packet)
                 val msg = String(buffer, 0, packet.length)
-                status = parseStatus(msg)
+                if (msg.isNotBlank()) status = parseStatus(msg)
             }
         } catch (e: Exception) {
             println(e.message)
@@ -60,10 +62,11 @@ fun get(): String {
 
         val voltage = status.batteryVoltage.toFloat()
         val perc = ((voltage - batMin) / voltageRange1p).toInt()
-        "${status.workmode}<br>" +
+        "${status.workMode}<br>" +
                 "Solar power: ${status.inputPower}W<br>" +
                 "Battery voltage: ${status.batteryVoltage}V&nbsp;&nbsp;${perc}%<br>" +
                 "Battery charging: ${status.chargingCurrent}A<br>" +
+                "Battery power: ${status.batteryPowerCalc}W<br>" +
                 "At: ${status.timestamp}"
     } catch (e: Exception) {
         "${e.message}"
@@ -71,17 +74,30 @@ fun get(): String {
 }
 
 
-fun parseStatus(data: String): Status {
+fun parseStatus(data: String?): Status {
 
-    // SPV1;getWorkMode:%s;getBatteryVoltage:%s;getPvInputPower1:%s;at:%d;getChargingCurrent:%s
-    val a = data.split(";")
-    val mode = a[1].split(":")[1]
-    val v = a[2].split(":")[1]
-    val p = a[3].split(":")[1]
-    val t = a[4].split(":")[1].trim().toLong()
-    val d = LocalDateTime.ofInstant(Instant.ofEpochMilli(t), ZoneId.systemDefault())
-            .format(DateTimeFormatter.ISO_DATE_TIME)
-    val ck = a[5].split(":")[1]
+    data?.let { it ->
+        if (it.isEmpty()) {
+            return emptyStatus()
+        }
 
-    return Status(workmode = mode, batteryVoltage = v, inputPower = p, chargingCurrent = ck, timestamp = d.toString())
+
+        // SPV1;getWorkMode:%s;getBatteryVoltage:%s;getPvInputPower1:%s;at:%d;getChargingCurrent:%s
+        val a = it.split(";")
+        if (a.size != 6) return emptyStatus().copy(workMode = "Parsing error")
+
+        val mode = a[1].split(":")[1]
+        val v = a[2].split(":")[1]
+        val p = a[3].split(":")[1]
+        val t = a[4].split(":")[1].trim().toLong()
+        val d = LocalDateTime.ofInstant(Instant.ofEpochMilli(t), ZoneId.systemDefault())
+                .format(DateTimeFormatter.ISO_DATE_TIME)
+        val ck = a[5].split(":")[1]
+
+        val batteryPower = (v.toFloat() * ck.toFloat()).toInt().toString()
+
+        return Status(workMode = mode, batteryVoltage = v, inputPower = p,
+                chargingCurrent = ck, timestamp = d.toString(), batteryPowerCalc = batteryPower)
+    }
+    return  emptyStatus()
 }
