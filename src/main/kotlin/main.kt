@@ -1,6 +1,11 @@
+import io.ktor.application.call
+import io.ktor.html.respondHtml
+import io.ktor.routing.get
+import io.ktor.routing.routing
+import io.ktor.server.engine.embeddedServer
+import io.ktor.server.netty.Netty
 import kotlinx.coroutines.runBlocking
-import spark.kotlin.Http
-import spark.kotlin.ignite
+import kotlinx.html.*
 import java.net.DatagramPacket
 import java.net.DatagramSocket
 import java.net.InetAddress
@@ -8,7 +13,6 @@ import java.time.Instant
 import java.time.LocalDateTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
-
 
 data class Status(
         val workMode: String,
@@ -18,19 +22,34 @@ data class Status(
         val timestamp: String,
         val batteryPowerCalc: String
 )
-fun emptyStatus() = Status(workMode = "Starting", batteryVoltage = "-", inputPower = "-", timestamp = "-", chargingCurrent = "-", batteryPowerCalc = "-")
+
+fun emptyStatus() = Status(workMode = "Starting", batteryVoltage = "-", inputPower = "-",
+        timestamp = "-", chargingCurrent = "-", batteryPowerCalc = "-")
 
 var status = emptyStatus()
 
 fun main(args: Array<String>) {
 
-    val http: Http = ignite()
-    http.port(80)
-
-
-    http.get("/") {
-        get()
-    }
+    embeddedServer(Netty, 80) {
+        routing {
+            get("/") {
+                call.respondHtml {
+                    head {
+                        meta {
+                            httpEquiv="refresh"
+                            content="3"
+                        }
+                    }
+                    body {
+                        p {
+                            +get()
+                        }
+                    }
+                }
+            }
+        }
+        println("Web server started")
+    }.start(wait = false)
 
     runBlocking { // launch a new coroutine in background and continue
 
@@ -99,5 +118,5 @@ fun parseStatus(data: String?): Status {
         return Status(workMode = mode, batteryVoltage = v, inputPower = p,
                 chargingCurrent = ck, timestamp = d.toString(), batteryPowerCalc = batteryPower)
     }
-    return  emptyStatus()
+    return emptyStatus()
 }
