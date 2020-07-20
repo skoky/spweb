@@ -15,16 +15,17 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
 data class Status(
-        val workMode: String,
+        val workMode: String?,
         val batteryVoltage: String,
         val inputPower: String,
         val chargingCurrent: String,
         val timestamp: String,
-        val batteryPowerCalc: String
+        val batteryPowerCalc: String,
+        val batterPerc: Int
 )
 
 fun emptyStatus() = Status(workMode = "Starting", batteryVoltage = "-", inputPower = "-",
-        timestamp = "-", chargingCurrent = "-", batteryPowerCalc = "-")
+        timestamp = "-", chargingCurrent = "-", batteryPowerCalc = "-", batterPerc = 0)
 
 var status = emptyStatus()
 
@@ -33,16 +34,50 @@ fun main(args: Array<String>) {
     embeddedServer(Netty, 80) {
         routing {
             get("/") {
+                updatePerc()
                 call.respondHtml {
                     head {
                         meta {
-                            httpEquiv="refresh"
-                            content="3"
+                            httpEquiv = "refresh"
+                            content = "3"
                         }
                     }
                     body {
-                        p {
-                            +get()
+                        if (status.workMode.isNullOrBlank()) {
+                            p {
+                                +"No data"
+                            }
+                        } else {
+                            p{
+                                +"Work mode: "
+                                status.workMode?.let { +it }
+                            }
+                            p {
+                                +"Solar power: "
+                                +status.inputPower
+                                +"W"
+                            }
+                            p {
+                                +"Battery voltage: "
+                                +status.batteryVoltage
+                                +" -> "
+                                +status.batterPerc.toString()
+                                +"%"
+                            }
+                            p{
+                                +"Battery charging: "
+                                +status.chargingCurrent
+                                +"A"
+                            }
+                            p{
+                                +"Battery power: "
+                                +status.batteryPowerCalc
+                                +"W"
+                            }
+                            p {
+                                +"At: "
+                                +status.timestamp
+                            }
                         }
                     }
                 }
@@ -71,24 +106,19 @@ fun main(args: Array<String>) {
 
 }
 
-fun get(): String {
+fun updatePerc() {
 
     val batMin = 47.5
     val batMax = 53.2
     val voltageRange1p = (batMax - batMin) / 100
 
-    return try {
+    try {
 
         val voltage = status.batteryVoltage.toFloat()
         val perc = ((voltage - batMin) / voltageRange1p).toInt()
-        "${status.workMode}<br>" +
-                "Solar power: ${status.inputPower}W<br>" +
-                "Battery voltage: ${status.batteryVoltage}V&nbsp;&nbsp;${perc}%<br>" +
-                "Battery charging: ${status.chargingCurrent}A<br>" +
-                "Battery power: ${status.batteryPowerCalc}W<br>" +
-                "At: ${status.timestamp}"
+        status = status.copy(batterPerc= perc)
     } catch (e: Exception) {
-        "${e.message}"
+        status = status.copy(workMode= null)
     }
 }
 
@@ -116,7 +146,7 @@ fun parseStatus(data: String?): Status {
         val batteryPower = (v.toFloat() * ck.toFloat()).toInt().toString()
 
         return Status(workMode = mode, batteryVoltage = v, inputPower = p,
-                chargingCurrent = ck, timestamp = d.toString(), batteryPowerCalc = batteryPower)
+                chargingCurrent = ck, timestamp = d.toString(), batteryPowerCalc = batteryPower, batterPerc = 0)
     }
     return emptyStatus()
 }
